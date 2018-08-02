@@ -1,0 +1,876 @@
+---
+title: "Take Home Exam - Intro to Predictive Modelling"
+author: "Akhilesh Reddy Narapareddy ( UTEID : an27467)"
+date: "August 1, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Chapter 2 : Problem #10
+#### This exercise involves the Boston housing data set.
+#### To begin, load in the Boston data set. The Boston data set is
+#### part of the MASS library in R.Now the data set is contained in the object Boston.
+
+#### a.How many rows are in this data set? How many columns? What do the rows and columns represent?
+* No of rows : 506
+* No of columns : 14
+
+#### (b) Make some pairwise scatterplots of the predictors (columns) in
+####       this data set. Describe your findings.
+** Findings: **  
+* rm(average number of rooms per dwelling) and lstat(lower status of the population (percent)) has a strong correlation with medv and crim might have a non linear relationship with medv
+
+```{r}
+library(MASS)
+require(ggplot2)
+require(lattice)
+library(reshape2)
+
+
+boston = Boston
+## Rows represent the various suburbs in Boston and the columns represent
+## the various characteristics of each suburb
+
+
+mtmelt <- melt(boston, id = "medv")
+ggplot(mtmelt, aes(x = value, y = medv)) +
+  facet_wrap(~variable, scales = "free") +
+  geom_point()
+
+```
+
+####(c) Are any of the predictors associated with per capita crime rate? If so, explain the relationship.
+#### Answer:
+* Access to highways and high tax rate have a high positive correlation with per capita crime rate
+* Also, it is worth noting that the black population has a negative correlation with per capita crime rate
+```{r}
+mtmelt <- melt(boston, id = "crim")
+ggplot(mtmelt, aes(x = value, y = crim)) +
+  facet_wrap(~variable, scales = "free") +
+  geom_point()
+head(mtmelt)
+boston_treated = na.omit(boston)
+sum(is.na(boston_treated$crim))
+
+k <- cor(boston_treated)
+k1 <- k[1,2:14] ## Correlation of per capita crime rate with other variables
+k1
+
+```
+#### (d) Do any of the suburbs of Boston appear to have particularly high crime rates? Tax rates? Pupil-teacher ratios? Comment on the range of each predictor
+#### Answer:
+* ptratio has a small range where as tax has a very vast range of values
+* Multiple suburbs have crim outliers
+```{r}
+boxplot(boston_treated$ptratio, las =2,main="ptratio")
+## ptratio
+## Has 2 outliers in the lower end of the data
+
+boxplot(Boston$tax, las =2,main="tax")
+## There are no outliers in the tax rates data
+
+boxplot(Boston$crim, las =2,main="crim")
+## A couple of cities on the top have high crime rates
+```
+
+#### (e) How many of the suburbs in this data set bound the Charles river?
+#### Answer:
+* 35 suburbs
+```{r}
+on_river <- sum(Boston$chas == 1, na.rm=TRUE)
+on_river
+```
+
+#### (f) What is the median pupil-teacher ratio among the towns in this data set?
+#### Answer:
+* 19.05
+```{r}
+summary(Boston$ptratio)
+```
+####(g) Which suburb of Boston has lowest median value of owneroccupied homes? What are the values of the other predictors for that suburb, and how do those values compare to the overall ranges for those predictors? Comment on your findings.
+```{r}
+ind <- which.min(Boston$medv)
+Boston[399,]
+```
+#### (h) In this data set, how many of the suburbs average more than seven rooms per dwelling? More than eight rooms per dwelling? Comment on the suburbs that average more than eight rooms per dwelling.
+#### Answer:
+* The range of house values is larger than the total dataset
+* crim follows a similar pattern as of the total dataset
+```{r}
+gt_7 <- sum(Boston$rm > 7)
+gt_8 <- sum(Boston$rm > 8)
+suburbs_rm_7 = subset(boston_treated,rm > 7 )
+boxplot(suburbs_rm_7$crim, las =2,main = "crim")
+
+```
+
+### Chapter 3 #15
+
+### This problem involves the Boston data set, which we saw in the lab for this chapter. We will now try to predict per capita crime rate using the other variables in this data set. In other words, per capita crime rate is the response, and the other variables are the predictors.
+
+#### a. For each predictor, fit a simple linear regression model to predict the response. Describe your results. In which of the models is there a statistically significant association between the predictor and the response? Create some plots to back up your assertions
+#### Answer:
+* Crime rate is positively influenced by rad and tax variables
+* Fitting the linear regression model for each predictor   
+**Results**:  
+* rad and tax predictors explain the maximum variability in the response variable with adjusted R^2 closer to 35%  
+* All the predictors are statistically significant in explaining the response variable based on their p-value which is less than 0.05 except for chas
+```{r}
+# Checking the correlation between the response variable and the predictors
+# Plotting pairwise scatterplots to check the correlation
+boston_treated = na.omit(Boston)
+mtmelt <- melt(boston_treated, id = "crim")
+ggplot(mtmelt, aes(x = value, y = crim)) +
+  facet_wrap(~variable, scales = "free") +
+  geom_point()
+
+# Correlation
+corr1 = cor(boston_treated)
+corr1[1,]
+
+predIdx <- c(2:14);
+
+k = lapply(predIdx, function(x) lm(Boston$crim ~ Boston[, x],na.action = na.omit))
+var_names <- names(Boston[,2:14])
+names(k) = var_names
+p_value = list()
+r_squared = list()
+coeff = list()
+for (i in 1:13){
+  p_value[i] = summary(k[[i]])$coefficients[2,4]
+  r_squared[i]= summary(k[[i]])$r.squared[1]
+  coeff[i] = summary(k[[i]])$coefficients[2,1]
+}
+results = cbind(var_names,p_value,r_squared)
+single_pred_coeff = cbind(var_names,coeff)
+
+library (plyr)
+summary(k[[1]])
+# Creating a column with all the regression coefficients
+l = lapply(1:13, function(x) k[[x]]$coefficients[2])
+names(l) = names(k)
+sim_coeff <- ldply (l, data.frame)
+sim_coeff
+library(data.table)
+setnames(sim_coeff, old=c(".id","X..i.."), new=c("Predictor", "sim_coeff"))
+
+```
+
+
+#### b.Fit a multiple regression model to predict the response using all of the predictors. Describe your results. For which predictors can we reject the null hypothesis H0 : βj = 0?  
+**Results**:
+* All the predictors combined can successfully explain close to 45% of the variation in the response variable  
+* rad,dis,black,medv,zn have relatively high t-value suggesting that they have a good influence on the response variable  
+* Null hypothesis can be rejected for rad,dis,black,medv,zn 
+```{r}
+# Fitting a multiple linear regression model
+set.seed(4)
+lm.fit = lm(Boston$crim~.,Boston)
+summary(lm.fit)
+
+library(data.table)
+# coefficients
+l2 = lm.fit$coefficients
+mul_coeff <- ldply (l2, data.frame)
+setnames(mul_coeff, old=c(".id","X..i.."), new=c("Predictor", "mul_coeff"))
+
+```
+ 
+#### c.
+#### How do your results from (a) compare to your results from (b)?Create a plot displaying the univariate regression coefficients from (a) on the x-axis, and the multiple regression coefficientsfrom (b) on the y-axis. That is, each predictor is displayed as a single point in the plot. Its coefficient in a simple linear regression model is shown on the x-axis, and its coefficient estimate in the multiple linear regression model is shown on the y-axis.
+```{r}
+# Inner join on sim_coeff and mul_coeff to get the data frame with both value in the same dataset
+ i = merge(sim_coeff, mul_coeff, by = 'Predictor')
+
+# Plotting a scatter plot
+ggplot(i, aes(x=sim_coeff, y=mul_coeff)) +
+  geom_point() + 
+  geom_text(label=rownames(i))
+```
+
+#### d.
+#### Is there evidence of non-linear association between any of the predictors and the response? To answer this question, for each predictor X, fit a model of the form
+#### Findings:
+* nox,rm,age,dis and medv have a non linear relationship with crim variable as adjusted R2 has increased by fitting a non-linear model
+
+```{r}
+
+predIdx <- c(2:14);
+
+k = lapply(predIdx, function(x) lm(Boston$crim ~ Boston[, x]+I(Boston[, x]^2)+I(Boston[, x]^3)))
+names(k) <- names(Boston[,2:14])
+summary(k[[13]])
+
+```
+
+### Problem: Chapter 6 #9
+
+### In this exercise, we will predict the number of applications received using the other variables in the College data set. 
+
+#### a.Split the data set into a training set and a test set.
+
+```{r}
+library(ISLR)
+college_copy = College
+
+library(caret)
+set.seed(99)
+
+train <- createDataPartition(y=college_copy$Apps,p=0.8,list=FALSE)
+train_data_coll <- college_copy[train,]
+train.matrix.coll <- model.matrix(~., data=data.frame(train_data_coll))[,-1]
+test_data_coll <- college_copy[-train,]
+test.matrix.coll <- model.matrix(~., data=data.frame(test_data_coll))[,-1]
+
+```
+#### b.Fit a linear model using least squares on the training set, and report the test error obtained
+```{r}
+# Fitting the linear model
+set.seed(99)
+lm.fit = lm(train_data_coll$Apps~.,train_data_coll)
+summary(lm.fit)
+
+t = predict(lm.fit, test_data_coll)
+t1 = data.frame(t)
+
+answer = cbind(test_data_coll[,"Apps"],t1)
+names(answer) <- c("actual", "predicted")
+lm.rmse = sqrt(mean((answer$actual-answer$predicted)^2))
+lm.rmse
+
+summary(College$Apps)
+```
+#### c.Fit a ridge regression model on the training set, with λ chosen by cross-validation. Report the test error obtained.
+
+```{r}
+library(glmnet)
+set.seed(99)
+
+apps = train_data_coll$Apps
+Ridge.Fit = glmnet(train.matrix.coll[,-2],apps,alpha=0)
+par(mfrow=c(1,2))
+plot(Ridge.Fit)
+CV.R = cv.glmnet(train.matrix.coll[,-2], apps,alpha=0)
+
+LamR = CV.R$lambda.1se # one standard deviation
+Lam.minR = CV.R$lambda.min
+par(mfrow=c(1,2))
+
+
+plot(log(CV.R$lambda),sqrt(CV.R$cvm),main="Ridge CV (k=10)",xlab="log(lambda)",ylab = "RMSE",col=4,type="b",cex.lab=1.2)
+abline(v=log(Lam.minR),lty=2,col=2,lwd=2)
+
+ridge.pred=predict(Ridge.Fit,s= Lam.minR,newx=test.matrix.coll[,-2])
+ridge.rmse = sqrt(mean((ridge.pred-test.matrix.coll[,2])^2))
+ridge.rmse
+
+```
+
+#### d.Fit a lasso model on the training set, with lambda chosen by crossvalidation.Report the test error obtained, along with the number of non-zero coefficient estimates.
+#### Results from lm,ridge and Lasso are almost same
+```{r}
+set.seed(99)
+lasso.Fit = glmnet(train.matrix.coll[,-2],apps,alpha=1)
+par(mfrow=c(1,2))
+plot(lasso.Fit)
+CV.L = cv.glmnet(train.matrix.coll[,-2], apps,alpha=1)
+
+LamL = CV.L$lambda.1se # one standard deviation
+Lam.minL = CV.L$lambda.min
+par(mfrow=c(1,2))
+
+
+plot(log(CV.L$lambda),sqrt(CV.L$cvm),main="Lasso CV (k=10)",xlab="log(lambda)",ylab = "RMSE",col=4,type="b",cex.lab=1.2)
+abline(v=log(Lam.minL),lty=2,col=2,lwd=2)
+
+Lasso.pred=predict(lasso.Fit,s= Lam.minL,newx=test.matrix.coll[,-2])
+Lasso.rmse = sqrt(mean((Lasso.pred-test.matrix.coll[,2])^2))
+Lasso.rmse
+
+coef.L = predict(CV.L,type="coefficients",s=LamL)
+coef.L
+
+```
+
+#### e. PCR method
+```{r}
+require(pls)
+library(pls)
+set.seed(1)
+pcr.fit=pcr(train_data_coll$Apps~.,data=train_data_coll ,scale =TRUE ,validation ="CV")
+validationplot(pcr.fit,val.type="MSEP")
+
+pcr.pred=predict (pcr.fit ,test_data_coll, ncomp =4)
+pcr.rmse = sqrt(mean((pcr.pred -test_data_coll$Apps)^2))
+pcr.rmse
+```
+
+#### f. PLS method
+```{r}
+library(pls)
+set.seed (1)
+pls.fit=plsr(train_data_coll$Apps~., data=train_data_coll, scale=TRUE ,validation ="CV")
+summary (pls.fit )
+
+pls.pred=predict (pls.fit ,test_data_coll, ncomp =7)
+pls.rmse = sqrt(mean((pls.pred -test_data_coll$Apps)^2))
+pls.rmse
+```
+#### g. Lasso has the least RMSE among the 5 approaches
+
+### Chapter 6 Problem 11
+#### We will now try to predict per capita crime rate in the Boston data set.
+#### a.Try out some of the regression methods explored in this chapter, such as best subset selection, the lasso, ridge regression, and PCR. Present and discuss results for the approaches that you consider.
+
+
+#### Results:
+* a.)Lasso regression has lower RMSE value than Ridge regression although its comparatively small
+
+* b.)RIdge has all the variables considered with age and tax having a minimum effect based on their coefficient values whereas in Lasso regression, age and tax variables are eliminated due to their low effect
+```{r}
+# a.
+###################################
+## Best subset selection regression
+###################################
+set.seed(99)
+library(caret)
+train <- createDataPartition(y=boston_treated$crim,p=0.8,list=FALSE)
+train_data_boston <- boston_treated[train,]
+train_boston.matrix <- model.matrix(crim~., data=data.frame(train_data_boston))[,-1]
+test_data_boston <- boston_treated[-train,]
+test_boston.matrix <- model.matrix(crim~., data=data.frame(test_data_boston))[,-1]
+
+library(leaps)
+regfit = regsubsets(crim~.,train_data_boston,nvmax = 15)
+reg.summary = summary(regfit)
+reg.summary$rsq
+
+### Selecting the best subset model by plotting the important characteristics
+par(mfrow = c(1,2))
+plot(reg.summary$rss,xlab = "Number of variables",ylab = "RSS",type = "l")
+plot(reg.summary$adjr2 ,xlab =" Number of Variables ",
+ylab=" Adjusted RSq",type="l")
+
+which.max(reg.summary$adjr2)
+points (9, reg.summary$adjr2[9], col ="red",cex =2, pch =20)
+
+plot(reg.summary$cp ,xlab =" Number of Variables ",ylab="Cp",type="l")
+cp.min = which.min (reg.summary$cp)
+points (cp.min, reg.summary$cp [cp.min], col ="red",cex =2, pch =20)
+
+bic.min = which.min (reg.summary$bic)
+plot(reg.summary$bic ,xlab=" Number of Variables ",ylab=" BIC",type = "l")
+points (bic.min, reg.summary$bic [bic.min], col =" red",cex =2, pch =20)
+
+##################
+# Ridge regression
+##################
+
+
+library(glmnet)
+set.seed(99)
+head(train_boston.matrix)
+crim = train_data_boston$crim
+Ridge.Fit = glmnet(train_boston.matrix[,-1],crim,alpha=0)
+par(mfrow=c(1,2))
+plot(Ridge.Fit)
+CV.R = cv.glmnet(train_boston.matrix[,-1], crim,alpha=0)
+
+LamR = CV.R$lambda.1se # one standard deviation
+Lam.minR = CV.R$lambda.min
+par(mfrow=c(1,2))
+
+
+plot(log(CV.R$lambda),sqrt(CV.R$cvm),main="Ridge CV (k=10)",xlab="log(lambda)",ylab = "RMSE",col=4,type="b",cex.lab=1.2)
+abline(v=log(Lam.minR),lty=2,col=2,lwd=2)
+head(test_data_boston)
+ridge.pred=predict(Ridge.Fit,s= Lam.minR,newx=test_boston.matrix[,-2])
+ridge.rmse = sqrt(mean((ridge.pred-test_data_boston[,1])^2))
+ridge.rmse
+
+
+#Lasso Regression
+set.seed(99)
+crim = train_data_boston$crim
+Lasso.Fit = glmnet(train_boston.matrix[,-1],crim,alpha=1)
+par(mfrow=c(1,2))
+plot(Lasso.Fit)
+CV.L = cv.glmnet(train_boston.matrix[,-1], crim,alpha=1)
+
+LamL = CV.L$lambda.1se # one standard deviation
+Lam.minL = CV.L$lambda.min
+par(mfrow=c(1,2))
+
+
+plot(log(CV.L$lambda),sqrt(CV.L$cvm),main="Lasso CV (k=10)",xlab="log(lambda)",ylab = "RMSE",col=4,type="b",cex.lab=1.2)
+abline(v=log(Lam.minL),lty=2,col=2,lwd=2)
+
+lasso.pred=predict(Lasso.Fit,s= Lam.minL,newx=test_boston.matrix[,-2])
+lasso.rmse = sqrt(mean((lasso.pred-test_data_boston[,1])^2))
+lasso.rmse
+
+coef.R = predict(CV.R,type="coefficients",s=Lam.minR)
+coef.R
+
+
+```
+
+### Chapter 4 Problem 10
+#### This question should be answered using the Weekly data set, which is part of the ISLR package. This data is similar in nature to the Smarket data from this chapters lab, except that it contains 1, 089 weekly returns for 21 years, from the beginning of 1990 to the end of 2010.
+* Logistic regression provided the best results among the two
+```{r}
+# a to d sub parts
+
+library(ISLR)
+names(Weekly)
+dim(Weekly)
+summary(Weekly)
+pairs(Weekly)
+
+# There appears to be a relationship between year and volume and none other than that
+
+cor(Weekly [,-9])
+plot(Weekly$Volume)
+
+######################
+## Logistic Regression
+######################
+
+
+glm.fit=glm(Direction~Lag1+Lag2+Lag3+Lag4+Lag5+Volume ,
+              data=Weekly ,family =binomial )
+summary (glm.fit)
+
+# Lag 2 appears to be statistically significant
+# confusion matrix
+
+fitted.results <- predict(glm.fit,type='response')
+
+# Confusion matrix
+cm_logistic <- table(Weekly$Direction, fitted.results>= 0.5)
+cm_logistic
+
+# 0.56 accuracy
+# The model has a lot of false positives
+
+# Fitting the logistic regression model
+# Splitting the data for 1990 to 2008
+
+
+train_data = subset(Weekly, Year >= 1990 & Year <=2008, select = c('Direction','Lag2'))
+test_data = subset(Weekly, Year >= 2009, select = c('Direction','Lag2'))
+
+glm.fit.train = glm(Direction~Lag2,data=train_data,family =binomial )
+summary (glm.fit.train)
+fitted.results.test <- predict(glm.fit.train,test_data[2],type='response')
+# Confusion matrix
+cm_logistic.test <- table(test_data$Direction, fitted.results.test>= 0.5)
+cm_logistic.test
+
+#Accuracy : 0.625
+
+#################
+# KNN with K = 1
+#################
+## KNN and the last question are yet to be answered
+## Better to normalize in case of varied scales of data
+library(class)
+library(kknn)
+set.seed(99)
+near = kknn(Direction~.,train_data,test_data,k=1,kernel = "rectangular")         
+
+table(near$fitted,test_data$Direction)
+# 50% is the accuracy
+
+#using different values of k in the knn classifier
+results = data.frame(k=1:50,accuracy=NA)
+k = 1:50
+accuracy = list()
+for(i in k){
+  near = kknn(Direction~.,train_data,test_data,k=i,kernel = "rectangular")
+  accuracy = mean(test_data$Direction == near$fitted)
+  results$accuracy[i] = accuracy
+}
+plot(results$k,results$accuracy)
+
+## increase in k does not necessarily increase accuracy in this case
+```
+### Chapter 8 : Problem 8
+
+In the lab, a classification tree was applied to the Carseats data set after converting Sales into a qualitative response variable. Now we will seek to predict Sales using regression trees and related approaches,treating the response as a quantitative variable.(a) Split the data set into a training set and a test set.
+(b) Fit a regression tree to the training set. Plot the tree, and interpret
+the results. What test error rate do you obtain?
+(c) Use cross-validation in order to determine the optimal level of
+tree complexity. Does pruning the tree improve the test error
+rate?
+(d) Use the bagging approach in order to analyze this data. What
+test error rate do you obtain? Use the importance() function to
+determine which variables are most important
+(e) Use random forests to analyze this data. What test error rate do
+you obtain? Use the importance() function to determine which
+variables are most important. Describe the effect of m, the number
+of variables considered at each split, on the error rate
+obtained.
+
+**Findings**:  
+* ShelveLoc, Price are the two most important variables  
+* error value forms a quadratic function while altering m value with a minimum at a certain of m  
+```{r}
+library(tree)
+library(ISLR)
+carseats_copy = Carseats
+# Split training and test data
+library(caret)
+set.seed(99)
+train <- createDataPartition(y=carseats_copy$Sales,p=0.8,list=FALSE)
+train_data_car <- carseats_copy[train,]
+train_carseats.matrix <- model.matrix(~., data=data.frame(train_data_car))[,-1]
+test_data_car <- carseats_copy[-train,]
+test_car.matrix <- model.matrix(~., data=data.frame(test_data_car))[,-1]
+
+library(tree)
+tree.carseats =tree(carseats_copy$Sales~.,carseats_copy )
+summary(tree.carseats)
+plot(tree.carseats)
+text(tree.carseats ,pretty =0)
+
+yhat=predict(tree.carseats ,newdata = test_data_car)
+actuals = test_data_car$Sales
+plot(yhat ,actuals)
+abline (0,1)
+rmse.tree = sqrt(mean((yhat - actuals)^2))
+# 1.67
+
+## Using cross- validation to decide the optimum level of pruning the tree
+cv.carseats =cv.tree(tree.carseats)
+plot(cv.carseats$size ,cv.carseats$dev ,type='b')
+
+# What is k in cv.tree function and how to determine the optimal tree length using cv?
+prune.carseats =prune.tree(tree.carseats ,best = 5)
+plot(prune.carseats)
+text(prune.carseats ,pretty =0)
+
+# Test error rate after pruning
+yhat.pruned = predict(prune.carseats ,newdata = test_data_car)
+actuals = test_data_car$Sales
+plot(yhat.pruned ,actuals)
+abline (0,1)
+rmse.tree.test = sqrt(mean((yhat.pruned - actuals)^2))
+rmse.tree.test
+#2.002
+
+# Pruning does not improve the test error rate necessarily but definitely the tree complexity
+
+## bagging:
+library (randomForest)
+set.seed (4)
+bag.carseats =randomForest(Sales~.,data=train_data_car,mtry=10, importance =TRUE)
+
+yhat.bag = predict (bag.carseats,newdata = test_data_car)
+plot(yhat.bag , actuals)
+abline (0,1)
+rmse.bagging.test = sqrt(mean(( yhat.bag - actuals)^2))
+#1.47
+importance(bag.carseats)
+
+# ShelveLoc, Price are the two most important variables
+
+## Random forests: mtry = 5
+set.seed(4)
+rf.carseats =randomForest(Sales~.,data=train_data_car,mtry=8, importance =TRUE)
+rf.carseats
+yhat.rf = predict (rf.carseats,newdata = test_data_car)
+plot(yhat.rf , actuals)
+abline (0,1)
+rmse.rf.test = sqrt(mean(( yhat.rf - actuals)^2))
+rmse.rf.test
+
+#1.47
+importance(rf.carseats)
+
+# 5 - 1.50
+# 6 -  1.47
+# 7 - 1.47
+# 8 - 1.453
+# 9 - 1.455
+# 10 - 1.47
+
+```
+
+### Chapter 8 problem 11
+
+This question uses the Caravan data set.
+(a) Create a training set consisting of the first 1,000 observations,
+and a test set consisting of the remaining observations.
+(b) Fit a boosting model to the training set with Purchase as the
+response and the other variables as predictors. Use 1,000 trees,
+and a shrinkage value of 0.01. Which predictors appear to be
+the most important?
+(c) Use the boosting model to predict the response on the test data.
+Predict that a person will make a purchase if the estimated probability
+of purchase is greater than 20 %. Form a confusion matrix.
+What fraction of the people predicted to make a purchase
+do in fact make one? How does this compare with the results
+obtained from applying KNN or logistic regression to this data
+set?
+* PPERSAUT,PBRAND,MKOOPKLA,MOPLHOOG,MGODGE are the top 5 predictors
+* Actual positives out of predicted positives is good for knn but the total predictive is poor
+* Boosting has a better prediction power with 21% positive prediction percentage
+```{r}
+
+data(Caravan)
+
+Caravan$Purchase = ifelse(Caravan$Purchase == 'Yes',1,0)
+
+train.caravan = Caravan[1:1000,]
+test.caravan = Caravan[-(1:1000),]
+
+library (gbm)
+set.seed (42)
+boost.caravan =gbm(Purchase~.,data=train.caravan, distribution="bernoulli",n.trees =1000,shrinkage = 0.01)
+summary(boost.caravan)
+
+
+yhat.boost=predict (boost.caravan ,newdata = test.caravan,n.trees =1000,type = 'response')
+
+fitted.results = ifelse(yhat.boost > 0.2,1,0)
+cm = table(test.caravan$Purchase,fitted.results)
+cm[2,2]/(cm[1,2]+cm[2,2])
+
+###########
+## KNN
+###########
+
+library(class)
+set.seed(99)
+near = kknn(Purchase~.,train.caravan,test.caravan,k=1,kernel = "rectangular")
+#using different values of k in the knn classifier
+results = data.frame(k=1:100,accuracy=NA)
+k = 1:100
+accuracy = list()
+for(i in k){
+  near = kknn(Purchase~.,train.caravan,test.caravan,k=i,kernel = "rectangular") 
+  accuracy = mean(test.caravan$Purchase == near$fitted)
+  results$accuracy[i] = accuracy
+}
+plot(results$k,results$accuracy)
+
+#Selecting k = 60
+near = kknn(Purchase~.,train.caravan,test.caravan,k=60,kernel = "rectangular") 
+results = ifelse(near$fitted >= 0.2 ,1,0)
+cm_knn = table(test.caravan$Purchase,results)
+cm_knn[2,2]/(cm_knn[1,2]+cm_knn[2,2])
+
+
+#############
+## Logistic
+#############
+
+glm.fit.train = glm(Purchase~.,data=train.caravan,family = binomial )
+summary (glm.fit.train)
+
+fitted.results.test <- predict(glm.fit.train,test.caravan[,-86],type='response')
+# Confusion matrix
+cm_logit <- table(test.caravan$Purchase, fitted.results.test>= 0.2)
+cm_logit[2,2]/(cm_logit[1,2]+cm_logit[2,2])
+
+
+```
+
+### Problem 1 : Beauty Problem  
+
+```{r}
+raw_data <- read.csv("BeautyData.csv")
+
+## Checking the summary of the data
+summary(raw_data)
+
+## Plotting courseevals and beautyscore
+train <- raw_data[,1:2]
+k <- lm(BeautyScore ~ CourseEvals,train)
+summary(k)
+library(ggplot2)
+
+ggplot(train, aes(x=BeautyScore, y=CourseEvals)) + geom_point() + geom_smooth()
+
+## Identifying the correlation between courseevaluations and beauty scores
+cor(raw_data$CourseEvals,raw_data$BeautyScore)
+
+## Gender has an effect on the course evaluation scores 
+ggplot(raw_data, aes(x=female, y=CourseEvals, group = female)) + geom_boxplot()   
+
+ggplot(raw_data, aes(x=tenuretrack, y=CourseEvals, group = tenuretrack)) + geom_boxplot() 
+
+ggplot(raw_data, aes(x=nonenglish, y=CourseEvals, group = nonenglish)) + geom_boxplot() 
+
+```
+#### b    
+#### It is impossible to accurately identify the effect of beauty on income.Skills and strengths of different people vary at different levels.It is quite difficult to keep the other factors constant while measuring the effect of beauty on the income.As teh measurement is based on humans, there are multipe subjective choices that are made based on the situation and type of job.Sometimes it is discrinimatory to say that a person got a job just because he/she is beautiful when he/she is equally talented than any other applicant for the job.Hence it is quite challenging to distinguish between productivity and discrimation in this regard.  
+
+### Problem: 2:Housing Price Structure
+1. Is there a premium for brick houses everything else being equal?  
+* Yes there is a premium of $12093.05 if it is a brick house  
+2. Is there a premium for houses in neighborhood 3?  
+* Yes there is a premium of $16980 if it is nbhd 3
+3. Is there an extra premium for brick houses in neighborhood 3?
+* Yes, there is an extra premium of $11933
+4. For the purposes of prediction could you combine the neighborhoods 1 and 2 into a
+single older neighborhood?
+* Yes we can combine neighborhood 1 adn 2 as they there is not much difference in the premium and the data shows that the nieghborhood 2 is not even statistically significant
+
+```{r}
+set.seed(4)
+midcity = read.csv('MidCity.csv')
+# Treating the data
+#1.Drop the home variable as it is an index
+midcity1 = midcity[,-1]
+#2. Change the nbhd variable as a factor variable
+midcity1$Nbhd = as.factor(midcity1$Nbhd)
+housing.fit = lm(midcity1$Price ~.,midcity1)
+#3. Create an interaction term between brick house and nbhd
+housing.fit.inter = lm(midcity1$Price ~ Nbhd+Offers+SqFt+Brick+Bedrooms+Bathrooms+Brick*Nbhd,midcity1)
+summary(housing.fit.inter)
+
+```
+
+
+
+### Problem 3 : What causes what??
+#### 1. 
+#### Washington D.C has a terror alert system which can be used to establish the causality between cops and crime but the other cities might or might not have it.By running a regression on crime and cops in other cities, we might end up proving the correlation between them but not the causation
+
+#### 2.
+#### Researchers at Upenn used the terror alert system in Washington D.C to establish the causation. During the terror alert days, there are generally more cops deployed onto the streets. By comparing the correlation results between crime and cops, the researchers are able to conclude a causal relation between cops and crime.
+
+#### From table 2,given the metro ridership is kept constant, the effect of high alert on crime is fairly constant.But we can clearly see that more the number of people on roads ,higher the crime rate.Also, introduction of metro ridership did not add much information as on high alert, it does not have a considerable effect
+
+#### 3.
+#### Also, there was a hypothesis that the terror alert might be causing people not to come outside and the crimes might have dropped because there were less victims to fall prey. But the researchers used the metro ridership data to check if there is any decline in ridership on a terror alert which turned out that the ridership was fairly same when compared to normal days.
+#### 4. In this model, the author was trying to show the interaction between high alert and the districts. There was a considerable between high alert and district 1 because additional police will be deployed on high alert days.But that might not be the case in other districts resulting in poor interaction between high alert and other districts
+
+### Problem 4:BART
+#### Apply BART to the California Housing Data example of Section 4 .Does BART outperform RF or Boosting?
+* BART has lower RMSE in comparison to Random forest and boosting
+```{r}
+
+## Random forest
+ca_data = read.csv("CAhousing.csv")
+logMedVal <- log(ca_data$medianHouseValue)
+ca_data_vf = data.frame(logMedVal,ca_data)
+
+library(caret)
+set.seed(4)
+train <- createDataPartition(y=ca_data_vf$logMedVal,p=0.8,list=FALSE)
+train_data_ca <- ca_data_vf[train,]
+test_data_ca <- ca_data_vf[-train,]
+
+rf.ca =randomForest(logMedVal~.,data=train_data_ca[,-10],mtry=5, importance =TRUE)
+actuals_ca = test_data_ca$logMedVal
+yhat.rf = predict (rf.ca,newdata = test_data_ca)
+plot(yhat.rf , actuals_ca)
+abline (0,1)
+rmse.rf.ca = sqrt(mean(( yhat.rf - actuals_ca)^2))
+rmse.rf.ca
+
+## BART
+library(BART)
+x = ca_data_vf[,-c(1,10)] #rm=number of rooms and lstat= percent lower status
+y = ca_data_vf$logMedVal # median value
+
+n=length(y) #total sample size
+set.seed(4) #
+ii = sample(1:n,floor(.75*n)) # indices for train data, 75% of data
+xtrain=x[ii,]; ytrain=y[ii] # training data
+xtest=x[-ii,]; ytest=y[-ii] # test data
+cat("train sample size is ",length(ytrain)," and test sample size is ",length(ytest),"\n")
+set.seed(4)
+bf_train = wbart(xtrain,ytrain)
+yhat = predict(bf_train,as.matrix(xtest))
+
+yhat.mean = apply(yhat,2,mean)
+
+plot(ytest,yhat.mean)
+abline(0,1,col=2)
+
+rmse.bart.ca = sqrt(mean(yhat.mean - ytest))
+rmse.bart.ca
+
+##########
+## Boosting
+##########
+library (gbm)
+set.seed (42)
+boost.ca =gbm(logMedVal~.,data=train_data_ca[,-10], distribution="gaussian",n.trees =1000,shrinkage = 0.01)
+summary(boost.ca)
+
+yhat.boost=predict (boost.ca ,newdata = test_data_ca,n.trees =1000,type = 'response')
+rmse.boosting.ca = sqrt(mean(( yhat.boost - actuals_ca)^2))
+rmse.boosting.ca
+
+```
+
+### Problem 5: Neural Nets
+
+```{r}
+library (MASS)
+data(Boston)
+attach(Boston)
+
+
+# Standardize the independent variables:
+minv = rep(0,13)
+maxv = rep(0,13)
+Boston_copy = Boston
+
+for (i in 1:13) {
+ minv[i] = min(Boston[[i]])
+ maxv[i] = max(Boston[[i]])
+ Boston_copy[[i]] = (Boston[[i]]-minv[i])/(maxv[i]-minv[i])
+}
+
+library(nnet)
+set.seed(99)
+Bnn1 = nnet(log(medv)~.,Boston_copy,size=3,decay=.1,linout=T,maxit=350)
+Bnn2 = nnet(log(medv)~.,Boston_copy,size=3,decay=.1,linout=T,maxit=20)
+Bnn3 = nnet(log(medv)~.,Boston_copy,size=3,decay=.0001,linout=T,maxit=350)
+Bnn4 = nnet(log(medv)~.,Boston_copy,size=3,decay=.6,linout=T,maxit=350)
+Bnn5 = nnet(log(medv)~.,Boston_copy,size=10,decay=.1,linout=T,maxit=350)
+
+
+Bnn_predict1 = predict(Bnn1,Boston_copy)
+Bnn_predict2 = predict(Bnn2,Boston_copy)
+Bnn_predict3 = predict(Bnn3,Boston_copy)
+Bnn_predict4 = predict(Bnn4,Boston_copy)
+Bnn_predict5 = predict(Bnn5,Boston_copy)
+
+rmse_nn1 = sqrt(mean((Bnn_predict1 - log(medv))^2))
+rmse_nn2 = sqrt(mean((Bnn_predict2 - log(medv))^2))
+rmse_nn3 = sqrt(mean((Bnn_predict3 - log(medv))^2))
+rmse_nn4 = sqrt(mean((Bnn_predict4 - log(medv))^2))
+rmse_nn5 = sqrt(mean((Bnn_predict5 - log(medv))^2))
+
+rmse_nn1
+rmse_nn2
+rmse_nn3
+rmse_nn4
+rmse_nn5
+
+```
+
+### Problem 6 : Describe your contribution to the project
+
+#### Leadership
+* With the help of my previous work experience, i was able to guide the team towards the right approach to solve the problem. I made sure that the work that was being done was organized and structured so that there was no redundancy while performing multiple tasks.
+* Apart from that, i played a key role in distributing the work among the team members to maintain the speed and made sure that we learnt from each others strengths.I encouraged the team members to ask for help and identify their own weaknesses. 
+
+#### Analysis
+* With respect to model building, i have designed the EDA steps for the project with the help of the other team members and ran iterations on models like logistic regression, random forests, Lasso regression to apply the learnings from the class onto the project.
+* Collaboration on sharing the insights and the code on Google sheets was my idea to successfully complete the project without any obstacles.
+
+#### Presentation
+* With respect to the story flow of the presentation, i suggested some key points like executive summary,talking headers, simplicity/brevity of the slides to convey the right information in the right amount of time.
+
+##                                  -- End of Exam --
